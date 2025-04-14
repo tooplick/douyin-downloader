@@ -18,7 +18,11 @@ from apiproxy.douyin.urls import Urls
 from apiproxy.douyin.result import Result
 from apiproxy.douyin.database import DataBase
 from apiproxy.common import utils
-from utils import logger
+import sys
+import os
+# 添加项目根目录到系统路径，确保可以正确导入utils模块
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from utils.logger import logger
 
 # 创建全局console实例
 console = Console()
