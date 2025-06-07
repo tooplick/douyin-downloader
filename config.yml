@@ -12,15 +12,16 @@
 # 可以设置多个链接, 确保至少一个链接
 # 必选
 link:
+  # 测试用户主页下载（已知可以工作）
+  - https://www.douyin.com/user/MS4wLjABAAAA6O7EZyfDRYXxJrUTpf91K3tmB4rBROkAw-nYMfld8ss
+  # 测试单个视频下载
+  # - https://v.douyin.com/iRGu2mBL/
   # -  https://v.douyin.com/kVefc81/
   # -  https://v.douyin.com/kVdkdxY/
   # -  https://v.douyin.com/kVdMcrr/
-  # -  https://v.douyin.com/iRGu2mBL/
   # -  https://v.douyin.com/iRGukBBk/
   # -  https://v.douyin.com/iRGuJcW8/
   # -  https://v.douyin.com/iRGHQY5t/
-  # - https://www.douyin.com/user/MS4wLjABAAAAXrGDowccDgJnarm2l95p80ojY5UpD-4VE_4WJwXcjvAMzQ79Ol1xizyLH8W3lgPX
-  - https://www.douyin.com/user/MS4wLjABAAAA6O7EZyfDRYXxJrUTpf91K3tmB4rBROkAw-nYMfld8ss
 
 # 下载保存位置, 默认当前文件位置
 # 必选
@@ -43,9 +44,9 @@ avatar: True
 json: True
 
 
-# 下载时间范围
-start_time: "2024-12-29"
-end_time: "2024-12-30"
+# 下载时间范围 (留空表示不限制时间)
+start_time: ""
+end_time: ""
 
 
 folderstyle: True # True -> 每个视频是一个单独的文件夹; False -> 所有视频共用一个文件夹
@@ -67,17 +68,15 @@ folderstyle: True # True -> 每个视频是一个单独的文件夹; False -> �
 # 可选
 mode:
   - post
-  - like
-  - mix
 
 # 下载作品个数设置
 # 可选
 number:
-  post: 0     # 主页下作品下载个数设置, 默认为0 全部下载
-  like: 5     # 主页下喜欢下载个数设置, 默认为0 全部下载
+  post: 1     # 主页下作品下载个数设置, 默认为0 全部下载
+  like: 3     # 主页下喜欢下载个数设置, 默认为0 全部下载
   allmix: 1   # 主页下合集下载个数设置, 默认为0 全部下载
-  mix: 5      # 单个合集下作品下载个数设置, 默认为0 全部下载
-  music: 5    # 音乐(原声)下作品下载个数设置, 默认为0 全部下载
+  mix: 3      # 单个合集下作品下载个数设置, 默认为0 全部下载
+  music: 3    # 音乐(原声)下作品下载个数设置, 默认为0 全部下载
 
 database: True # 如果不使用数据库, 增量更新将不可用
 

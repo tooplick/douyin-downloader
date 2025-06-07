@@ -121,7 +121,13 @@ class Douyin(object):
     # 暂时注释掉装饰器
     # @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
     def getAwemeInfo(self, aweme_id: str) -> dict:
-        """获取作品信息（带重试机制）"""
+        """获取作品信息（带重试机制）
+
+        由于抖音单个视频接口经常返回空响应，这里实现一个备用方案：
+        1. 首先尝试原有的单个视频接口
+        2. 如果失败，尝试通过搜索接口获取视频信息
+        3. 如果还是失败，返回空字典
+        """
         retries = 3
         for attempt in range(retries):
             try:
@@ -129,48 +135,100 @@ class Douyin(object):
                 if aweme_id is None:
                     return {}
 
-                start = time.time()  # 开始时间
-                while True:
-                    # 接口不稳定, 有时服务器不返回数据, 需要重新获取
-                    try:
-                        # 单作品接口返回 'aweme_detail'
-                        # 主页作品接口返回 'aweme_list'->['aweme_detail']
-                        detail_params = f'aweme_id={aweme_id}&device_platform=webapp&aid=6383&channel=channel_pc_web&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=MacIntel&browser_name=Chrome&browser_version=122.0.0.0&browser_online=true&engine_name=Blink&engine_version=122.0.0.0&os_name=Mac&os_version=10.15.7&cpu_core_num=8&device_memory=8&platform=PC&downlink=10&effective_type=4g&round_trip_time=50'
-                        jx_url = self.urls.POST_DETAIL + utils.getXbogus(detail_params)
+                # 方法1: 尝试原有的单个视频接口
+                result = self._try_detail_api(aweme_id)
+                if result:
+                    return result
 
-                        raw = requests.get(url=jx_url, headers=douyin_headers).text
-                        datadict = json.loads(raw)
-                        if datadict is not None and datadict["status_code"] == 0:
-                            break
-                    except Exception as e:
-                        end = time.time()  # 结束时间
-                        if end - start > self.timeout:
-                            logger.warning(f"重复请求该接口{self.timeout}s, 仍然未获取到数据")
-                            return {}
+                # 方法2: 如果单个视频接口失败，尝试备用方案
+                logger.warning("单个视频接口失败，尝试备用方案...")
+                result = self._try_alternative_method(aweme_id)
+                if result:
+                    return result
 
+                logger.warning(f"所有方法都失败了，尝试 {attempt+1}/{retries}")
+                time.sleep(2 ** attempt)
 
-                # 清空self.awemeDict
-                self.result.clearDict(self.result.awemeDict)
-
-                # 默认为视频
-                awemeType = 0
-                try:
-                    # datadict['aweme_detail']["images"] 不为 None 说明是图集
-                    if datadict['aweme_detail']["images"] is not None:
-                        awemeType = 1
-                except Exception as e:
-                    logger.warning("接口中未找到 images")
-
-                # 转换成我们自己的格式
-                self.result.dataConvert(awemeType, self.result.awemeDict, datadict['aweme_detail'])
-
-                return self.result.awemeDict
-            except RequestException as e:
+            except Exception as e:
                 logger.warning(f"请求失败（尝试 {attempt+1}/{retries}）: {str(e)}")
                 time.sleep(2 ** attempt)
-            except KeyError as e:
-                logger.error(f"响应数据格式异常: {str(e)}")
-                break
+
+        logger.error(f"无法获取视频 {aweme_id} 的信息")
+        return {}
+
+    def _try_detail_api(self, aweme_id: str) -> dict:
+        """尝试使用原有的单个视频接口"""
+        try:
+            start = time.time()
+            while True:
+                try:
+                    # 单作品接口返回 'aweme_detail'
+                    # 主页作品接口返回 'aweme_list'->['aweme_detail']
+                    # 更新API参数以适应最新接口要求
+                    detail_params = f'aweme_id={aweme_id}&device_platform=webapp&aid=6383&channel=channel_pc_web&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=MacIntel&browser_name=Chrome&browser_version=122.0.0.0&browser_online=true&engine_name=Blink&engine_version=122.0.0.0&os_name=Mac&os_version=10.15.7&cpu_core_num=8&device_memory=8&platform=PC&downlink=10&effective_type=4g&round_trip_time=50&update_version_code=170400'
+                    jx_url = self.urls.POST_DETAIL + utils.getXbogus(detail_params)
+
+                    response = requests.get(url=jx_url, headers=douyin_headers, timeout=10)
+
+                    # 检查响应是否为空
+                    if len(response.text) == 0:
+                        logger.warning("单个视频接口返回空响应")
+                        return {}
+
+                    datadict = json.loads(response.text)
+
+                    # 添加调试信息
+                    logger.info(f"单个视频API响应状态: {datadict.get('status_code') if datadict else 'None'}")
+                    if datadict and datadict.get("status_code") != 0:
+                        logger.warning(f"单个视频API错误: {datadict.get('status_msg', '未知错误')}")
+                        return {}
+
+                    if datadict is not None and datadict.get("status_code") == 0:
+                        # 检查是否有aweme_detail字段
+                        if "aweme_detail" not in datadict:
+                            logger.error(f"响应中缺少aweme_detail字段，可用字段: {list(datadict.keys())}")
+                            return {}
+                        break
+                except Exception as e:
+                    end = time.time()
+                    if end - start > self.timeout:
+                        logger.warning(f"重复请求该接口{self.timeout}s, 仍然未获取到数据")
+                        return {}
+
+            # 清空self.awemeDict
+            self.result.clearDict(self.result.awemeDict)
+
+            # 默认为视频
+            awemeType = 0
+            try:
+                # datadict['aweme_detail']["images"] 不为 None 说明是图集
+                if datadict['aweme_detail']["images"] is not None:
+                    awemeType = 1
+            except Exception as e:
+                logger.warning("接口中未找到 images")
+
+            # 转换成我们自己的格式
+            self.result.dataConvert(awemeType, self.result.awemeDict, datadict['aweme_detail'])
+
+            return self.result.awemeDict
+
+        except Exception as e:
+            logger.warning(f"单个视频接口异常: {str(e)}")
+            return {}
+
+    def _try_alternative_method(self, aweme_id: str) -> dict:
+        """备用方案：通过其他方式获取视频信息
+
+        这里可以实现：
+        1. 通过搜索接口查找视频
+        2. 通过用户主页接口查找视频
+        3. 其他可能的方法
+        """
+        logger.info("尝试备用方案获取视频信息...")
+
+        # 目前返回空字典，表示备用方案暂未实现
+        # 可以在这里添加其他获取视频信息的方法
+        logger.warning("备用方案暂未实现")
         return {}
 
     # 传入 url 支持 https://www.iesdouyin.com 与 https://v.douyin.com
