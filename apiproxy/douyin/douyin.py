@@ -135,8 +135,8 @@ class Douyin(object):
                     try:
                         # 单作品接口返回 'aweme_detail'
                         # 主页作品接口返回 'aweme_list'->['aweme_detail']
-                        jx_url = self.urls.POST_DETAIL + utils.getXbogus(
-                            f'aweme_id={aweme_id}&device_platform=webapp&aid=6383')
+                        detail_params = f'aweme_id={aweme_id}&device_platform=webapp&aid=6383&channel=channel_pc_web&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=MacIntel&browser_name=Chrome&browser_version=122.0.0.0&browser_online=true&engine_name=Blink&engine_version=122.0.0.0&os_name=Mac&os_version=10.15.7&cpu_core_num=8&device_memory=8&platform=PC&downlink=10&effective_type=4g&round_trip_time=50'
+                        jx_url = self.urls.POST_DETAIL + utils.getXbogus(detail_params)
 
                         raw = requests.get(url=jx_url, headers=douyin_headers).text
                         datadict = json.loads(raw)
@@ -221,26 +221,61 @@ class Douyin(object):
             
             while True:
                 try:
-                    # 构建请求URL
+                    # 构建请求URL - 添加更多必需参数
+                    base_params = f'sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}&device_platform=webapp&aid=6383&channel=channel_pc_web&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=MacIntel&browser_name=Chrome&browser_version=122.0.0.0&browser_online=true&engine_name=Blink&engine_version=122.0.0.0&os_name=Mac&os_version=10.15.7&cpu_core_num=8&device_memory=8&platform=PC&downlink=10&effective_type=4g&round_trip_time=50'
+
                     if mode == "post":
-                        url = self.urls.USER_POST + utils.getXbogus(
-                            f'sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}&device_platform=webapp&aid=6383')
+                        url = self.urls.USER_POST + utils.getXbogus(base_params)
                     elif mode == "like":
-                        url = self.urls.USER_FAVORITE_A + utils.getXbogus(
-                            f'sec_user_id={sec_uid}&count={count}&max_cursor={max_cursor}&device_platform=webapp&aid=6383')
+                        # 尝试备用like接口
+                        try:
+                            url = self.urls.USER_FAVORITE_A + utils.getXbogus(base_params)
+                        except:
+                            # 如果主接口失败，尝试备用接口
+                            url = self.urls.USER_FAVORITE_B + utils.getXbogus(base_params)
                     else:
                         self.console.print("[red]❌ 模式选择错误，仅支持post、like[/]")
                         return None
 
                     # 发送请求
-                    res = requests.get(url=url, headers=douyin_headers)
-                    datadict = json.loads(res.text)
+                    res = requests.get(url=url, headers=douyin_headers, timeout=10)
+
+                    # 检查HTTP状态码
+                    if res.status_code != 200:
+                        self.console.print(f"[red]❌ HTTP请求失败: {res.status_code}[/]")
+                        break
+
+                    try:
+                        datadict = json.loads(res.text)
+                    except json.JSONDecodeError as e:
+                        self.console.print(f"[red]❌ JSON解析失败: {str(e)}[/]")
+                        self.console.print(f"[yellow]🔍 响应内容: {res.text[:500]}...[/]")
+                        self.console.print(f"[yellow]🔍 请求URL: {url}[/]")
+                        self.console.print(f"[yellow]🔍 模式: {mode}[/]")
+
+                        # 检查是否是空响应或权限问题
+                        if not res.text.strip():
+                            self.console.print(f"[yellow]💡 提示: {mode}模式可能需要特殊权限或该用户的{mode}列表不公开[/]")
+                        elif "登录" in res.text or "login" in res.text.lower():
+                            self.console.print(f"[yellow]💡 提示: {mode}模式需要登录状态[/]")
+                        elif "权限" in res.text or "permission" in res.text.lower():
+                            self.console.print(f"[yellow]💡 提示: {mode}模式权限不足[/]")
+                        break
                     
                     # 处理返回数据
                     if not datadict or datadict.get("status_code") != 0:
                         self.console.print(f"[red]❌ API请求失败: {datadict.get('status_msg', '未知错误')}[/]")
+                        # 打印详细的响应信息用于调试
+                        self.console.print(f"[yellow]🔍 响应状态码: {datadict.get('status_code') if datadict else 'None'}[/]")
+                        self.console.print(f"[yellow]🔍 响应内容: {str(datadict)[:200]}...[/]")
                         break
-                        
+
+                    # 检查aweme_list字段是否存在
+                    if "aweme_list" not in datadict:
+                        self.console.print(f"[red]❌ 响应中缺少aweme_list字段[/]")
+                        self.console.print(f"[yellow]🔍 可用字段: {list(datadict.keys())}[/]")
+                        break
+
                     current_count = len(datadict["aweme_list"])
                     total_fetched += current_count
                     
@@ -322,8 +357,8 @@ class Douyin(object):
         while True:
             # 接口不稳定, 有时服务器不返回数据, 需要重新获取
             try:
-                live_api = self.urls.LIVE + utils.getXbogus(
-                    f'aid=6383&device_platform=web&web_rid={web_rid}')
+                live_params = f'aid=6383&device_platform=web&web_rid={web_rid}&channel=channel_pc_web&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=MacIntel&browser_name=Chrome&browser_version=122.0.0.0&browser_online=true&engine_name=Blink&engine_version=122.0.0.0&os_name=Mac&os_version=10.15.7&cpu_core_num=8&device_memory=8&platform=PC&downlink=10&effective_type=4g&round_trip_time=50'
+                live_api = self.urls.LIVE + utils.getXbogus(live_params)
 
                 response = requests.get(live_api, headers=douyin_headers)
                 live_json = json.loads(response.text)
@@ -438,14 +473,34 @@ class Douyin(object):
 
             while True:  # 外层循环
                 try:
-                    url = self.urls.USER_MIX + utils.getXbogus(
-                        f'mix_id={mix_id}&cursor={cursor}&count={count}&device_platform=webapp&aid=6383')
+                    mix_params = f'mix_id={mix_id}&cursor={cursor}&count={count}&device_platform=webapp&aid=6383&channel=channel_pc_web&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=MacIntel&browser_name=Chrome&browser_version=122.0.0.0&browser_online=true&engine_name=Blink&engine_version=122.0.0.0&os_name=Mac&os_version=10.15.7&cpu_core_num=8&device_memory=8&platform=PC&downlink=10&effective_type=4g&round_trip_time=50'
+                    url = self.urls.USER_MIX + utils.getXbogus(mix_params)
 
-                    res = requests.get(url=url, headers=douyin_headers)
-                    datadict = json.loads(res.text)
+                    res = requests.get(url=url, headers=douyin_headers, timeout=10)
+
+                    # 检查HTTP状态码
+                    if res.status_code != 200:
+                        self.console.print(f"[red]❌ 合集HTTP请求失败: {res.status_code}[/]")
+                        break
+
+                    try:
+                        datadict = json.loads(res.text)
+                    except json.JSONDecodeError as e:
+                        self.console.print(f"[red]❌ 合集JSON解析失败: {str(e)}[/]")
+                        self.console.print(f"[yellow]🔍 响应内容: {res.text[:500]}...[/]")
+                        break
 
                     if not datadict:
-                        self.console.print("[red]❌ 获取数据失败[/]")
+                        self.console.print("[red]❌ 获取合集数据失败[/]")
+                        break
+
+                    if datadict.get("status_code") != 0:
+                        self.console.print(f"[red]❌ 合集API请求失败: {datadict.get('status_msg', '未知错误')}[/]")
+                        break
+
+                    if "aweme_list" not in datadict:
+                        self.console.print(f"[red]❌ 合集响应中缺少aweme_list字段[/]")
+                        self.console.print(f"[yellow]🔍 可用字段: {list(datadict.keys())}[/]")
                         break
 
                     for aweme in datadict["aweme_list"]:
@@ -488,6 +543,9 @@ class Douyin(object):
 
                 except Exception as e:
                     self.console.print(f"[red]❌ 获取作品列表出错: {str(e)}[/]")
+                    # 添加更详细的错误信息
+                    if 'datadict' in locals():
+                        self.console.print(f"[yellow]🔍 最后一次响应: {str(datadict)[:300]}...[/]")
                     break
 
         if filtered_count > 0:
@@ -518,11 +576,57 @@ class Douyin(object):
             while True:
                 # 接口不稳定, 有时服务器不返回数据, 需要重新获取
                 try:
-                    url = self.urls.USER_MIX_LIST + utils.getXbogus(
-                        f'sec_user_id={sec_uid}&count={count}&cursor={cursor}&device_platform=webapp&aid=6383')
+                    mix_list_params = f'sec_user_id={sec_uid}&count={count}&cursor={cursor}&device_platform=webapp&aid=6383&channel=channel_pc_web&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=MacIntel&browser_name=Chrome&browser_version=122.0.0.0&browser_online=true&engine_name=Blink&engine_version=122.0.0.0&os_name=Mac&os_version=10.15.7&cpu_core_num=8&device_memory=8&platform=PC&downlink=10&effective_type=4g&round_trip_time=50'
+                    url = self.urls.USER_MIX_LIST + utils.getXbogus(mix_list_params)
 
-                    res = requests.get(url=url, headers=douyin_headers)
-                    datadict = json.loads(res.text)
+                    res = requests.get(url=url, headers=douyin_headers, timeout=10)
+
+                    # 检查HTTP状态码
+                    if res.status_code != 200:
+                        self.console.print(f"[red]❌ 合集列表HTTP请求失败: {res.status_code}[/]")
+                        break
+
+                    try:
+                        # 尝试直接解析，如果失败则检查是否为压缩格式
+                        try:
+                            datadict = json.loads(res.text)
+                        except json.JSONDecodeError:
+                            # 可能是压缩响应，尝试手动解压
+                            content_encoding = res.headers.get('content-encoding', '').lower()
+                            if content_encoding == 'gzip':
+                                import gzip
+                                content = gzip.decompress(res.content).decode('utf-8')
+                                datadict = json.loads(content)
+                            elif content_encoding == 'br':
+                                try:
+                                    import brotli
+                                    content = brotli.decompress(res.content).decode('utf-8')
+                                    datadict = json.loads(content)
+                                except ImportError:
+                                    self.console.print("[red]❌ 需要安装brotli库来处理br压缩: pip install brotli[/]")
+                                    raise
+                            else:
+                                raise  # 重新抛出原始异常
+                    except json.JSONDecodeError as e:
+                        self.console.print(f"[red]❌ 合集列表JSON解析失败: {str(e)}[/]")
+                        self.console.print(f"[yellow]🔍 响应内容: {res.text[:500]}...[/]")
+                        self.console.print(f"[yellow]🔍 响应头: {dict(res.headers)}[/]")
+                        break
+
+                    # 检查响应结构
+                    if not datadict:
+                        self.console.print("[red]❌ 获取合集列表数据失败[/]")
+                        break
+
+                    if datadict.get("status_code") != 0:
+                        self.console.print(f"[red]❌ 合集列表API请求失败: {datadict.get('status_msg', '未知错误')}[/]")
+                        break
+
+                    if "mix_infos" not in datadict:
+                        self.console.print(f"[red]❌ 响应中缺少mix_infos字段[/]")
+                        self.console.print(f"[yellow]🔍 可用字段: {list(datadict.keys())}[/]")
+                        break
+
                     print('[  提示  ]:本次请求返回 ' + str(len(datadict["mix_infos"])) + ' 条数据\r')
 
                     if datadict is not None and datadict["status_code"] == 0:
@@ -532,6 +636,11 @@ class Douyin(object):
                     if end - start > self.timeout:
                         print("[  提示  ]:重复请求该接口" + str(self.timeout) + "s, 仍然未获取到数据")
                         return mixIdNameDict
+
+            # 检查datadict是否成功获取
+            if 'datadict' not in locals() or not datadict:
+                print("[  提示  ]:未能获取到有效的合集列表数据")
+                return mixIdNameDict
 
 
             for mix in datadict["mix_infos"]:
@@ -581,11 +690,36 @@ class Douyin(object):
             while True:
                 # 接口不稳定, 有时服务器不返回数据, 需要重新获取
                 try:
-                    url = self.urls.MUSIC + utils.getXbogus(
-                        f'music_id={music_id}&cursor={cursor}&count={count}&device_platform=webapp&aid=6383')
+                    music_params = f'music_id={music_id}&cursor={cursor}&count={count}&device_platform=webapp&aid=6383&channel=channel_pc_web&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=MacIntel&browser_name=Chrome&browser_version=122.0.0.0&browser_online=true&engine_name=Blink&engine_version=122.0.0.0&os_name=Mac&os_version=10.15.7&cpu_core_num=8&device_memory=8&platform=PC&downlink=10&effective_type=4g&round_trip_time=50'
+                    url = self.urls.MUSIC + utils.getXbogus(music_params)
 
-                    res = requests.get(url=url, headers=douyin_headers)
-                    datadict = json.loads(res.text)
+                    res = requests.get(url=url, headers=douyin_headers, timeout=10)
+
+                    # 检查HTTP状态码
+                    if res.status_code != 200:
+                        self.console.print(f"[red]❌ 音乐HTTP请求失败: {res.status_code}[/]")
+                        break
+
+                    try:
+                        datadict = json.loads(res.text)
+                    except json.JSONDecodeError as e:
+                        self.console.print(f"[red]❌ 音乐JSON解析失败: {str(e)}[/]")
+                        self.console.print(f"[yellow]🔍 响应内容: {res.text[:500]}...[/]")
+                        break
+
+                    if not datadict:
+                        self.console.print("[red]❌ 获取音乐数据失败[/]")
+                        break
+
+                    if datadict.get("status_code") != 0:
+                        self.console.print(f"[red]❌ 音乐API请求失败: {datadict.get('status_msg', '未知错误')}[/]")
+                        break
+
+                    if "aweme_list" not in datadict:
+                        self.console.print(f"[red]❌ 音乐响应中缺少aweme_list字段[/]")
+                        self.console.print(f"[yellow]🔍 可用字段: {list(datadict.keys())}[/]")
+                        break
+
                     print('[  提示  ]:本次请求返回 ' + str(len(datadict["aweme_list"])) + ' 条数据\r')
 
                     if datadict is not None and datadict["status_code"] == 0:
@@ -678,8 +812,8 @@ class Douyin(object):
         while True:
             # 接口不稳定, 有时服务器不返回数据, 需要重新获取
             try:
-                url = self.urls.USER_DETAIL + utils.getXbogus(
-                        f'sec_user_id={sec_uid}&device_platform=webapp&aid=6383')
+                user_detail_params = f'sec_user_id={sec_uid}&device_platform=webapp&aid=6383&channel=channel_pc_web&pc_client_type=1&version_code=170400&version_name=17.4.0&cookie_enabled=true&screen_width=1920&screen_height=1080&browser_language=zh-CN&browser_platform=MacIntel&browser_name=Chrome&browser_version=122.0.0.0&browser_online=true&engine_name=Blink&engine_version=122.0.0.0&os_name=Mac&os_version=10.15.7&cpu_core_num=8&device_memory=8&platform=PC&downlink=10&effective_type=4g&round_trip_time=50'
+                url = self.urls.USER_DETAIL + utils.getXbogus(user_detail_params)
 
                 res = requests.get(url=url, headers=douyin_headers)
                 datadict = json.loads(res.text)
