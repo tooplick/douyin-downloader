@@ -399,9 +399,6 @@ python DouYinCommand.py -C True \
 - ⚠️ 喜欢列表下载：取决于用户隐私设置
 - ⚠️ 单个视频下载：部分接口限制，建议通过用户主页下载
 
-## 使用交流群
-
-![fuye](img/fuye.jpg)
 
 ## 🤝 贡献指南
 
